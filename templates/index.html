@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CHYO Control Panel</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-gradient"></div>
+    <div class="hero-content">
+      <div class="logo">{{ banner_title }}</div>
+      <div class="handle">{{ banner_handle }}</div>
+      <div class="subtitle">High-performance control for automated follow workflow</div>
+      <div class="stats">
+        <div class="stat"><span>Target</span><strong>@{{ target_username }}</strong></div>
+        <div class="stat"><span>Sessions</span><strong>{{ session_count }}</strong></div>
+      </div>
+      <div class="actions">
+        <button id="startBtn" class="btn-primary">Start Run</button>
+      </div>
+    </div>
+    <div class="hero-shine"></div>
+  </header>
+
+  <main class="container">
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Status</h2>
+        <div id="badge" class="badge">Idle</div>
+      </div>
+      <div class="progress">
+        <div id="progressBar" class="progress-bar" style="width: 0%"></div>
+      </div>
+      <div class="grid">
+        <div class="grid-item">
+          <div class="kpi"><span id="kpiDone">0</span>/<span id="kpiTotal">0</span></div>
+          <div class="kpi-label">Completed</div>
+        </div>
+        <div class="grid-item">
+          <div class="kpi" id="kpiTarget">@{{ target_username }}</div>
+          <div class="kpi-label">Target</div>
+        </div>
+        <div class="grid-item">
+          <div class="kpi" id="kpiStarted">—</div>
+          <div class="kpi-label">Started</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Logs</h2>
+      </div>
+      <pre id="logs" class="logs"></pre>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <span>Built by <strong>{{ banner_handle }}</strong></span>
+  </footer>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const badge = document.getElementById('badge');
+    const progressBar = document.getElementById('progressBar');
+    const kpiDone = document.getElementById('kpiDone');
+    const kpiTotal = document.getElementById('kpiTotal');
+    const kpiStarted = document.getElementById('kpiStarted');
+    const logsEl = document.getElementById('logs');
+
+    let poller = null;
+
+    function msToTime(ms) {
+      if (!ms) return '—';
+      const d = new Date(ms * 1000);
+      return d.toLocaleString();
+    }
+
+    function setRunningUI(running) {
+      if (running) {
+        badge.textContent = 'Running';
+        badge.className = 'badge badge-live';
+        startBtn.disabled = true;
+      } else {
+        badge.textContent = 'Idle';
+        badge.className = 'badge';
+        startBtn.disabled = false;
+      }
+    }
+
+    async function fetchStatus() {
+      const res = await fetch('/status');
+      const data = await res.json();
+
+      setRunningUI(data.running);
+      kpiDone.textContent = data.done;
+      kpiTotal.textContent = data.total;
+      kpiStarted.textContent = data.startedAt ? new Date(data.startedAt * 1000).toLocaleString() : '—';
+
+      const pct = data.total > 0 ? Math.round((data.done / data.total) * 100) : 0;
+      progressBar.style.width = pct + '%';
+
+      logsEl.textContent = data.logs.join('\n');
+      logsEl.scrollTop = logsEl.scrollHeight;
+
+      if (!data.running && poller) {
+        clearInterval(poller);
+        poller = null;
+      }
+    }
+
+    async function startRun() {
+      try {
+        const res = await fetch('/start', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Failed to start run');
+          return;
+        }
+        setRunningUI(true);
+        if (!poller) {
+          poller = setInterval(fetchStatus, 1000);
+        }
+        await fetchStatus();
+      } catch (e) {
+        alert('Error: ' + e);
+      }
+    }
+
+    startBtn.addEventListener('click', startRun);
+
+    // Initial load
+    fetchStatus();
+    poller = setInterval(fetchStatus, 2000);
+  </script>
+</body>
+</html>
